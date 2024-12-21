@@ -11,6 +11,10 @@
 
 static LogLevel log_level = INFO;
 
+void set_log_level(LogLevel level) {
+    log_level = level;
+}
+
 char *format_string(const char *raw_msg, va_list args, char *formatted_msg)
 {
     int j = 0;

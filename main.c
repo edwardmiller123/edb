@@ -4,13 +4,15 @@
 #include <errno.h>
 
 #include "logger.h"
+#include "debugger.h"
 
 int main(int argc, char *argv[])
 {
+    set_log_level(INFO);
 
     if (argc < 2)
     {
-        printf("to few args\n");
+        logger(ERROR, "Must specify executable to debug");
         return -1;
     }
 
@@ -20,26 +22,32 @@ int main(int argc, char *argv[])
 
     if (pid == 0)
     {
-        // we are the child process so we should allow the parent to trace us
+        // we are the child process we should allow the parent to trace us
         // and start executing the program we wish to debug
         long ptrace_err = ptrace(PTRACE_TRACEME, 0, NULL, NULL);
         if (ptrace_err < 0)
         {
-            logger(ERROR, "ptrace failed. ERRNO: %d\n", errno);
+            logger(ERROR, "Ptrace failed. ERRNO: %d\n", errno);
             return -1;
         }
 
         int exec_err = execl(program, program, (char *)NULL);
         if (exec_err < 0)
         {
-            logger(ERROR, "failed to run %s. ERRNO: %d\n", program, errno);
+            logger(ERROR, "Failed to run %s. ERRNO: %d\n", program, errno);
             return -1;
         }
     }
     else if (pid >= 1)
     {
+        Debugger * debugger = new_debugger(pid);
         // we are the parent process so begin debugging
         logger(INFO, "Started debugging process with pid %d", pid);
+        int debug_err = run_debugger(debugger);
+        if (debug_err < 0) {
+            logger(ERROR, "Debugger exited. ERRNO: %d\n", errno);
+            return -1;
+        }
        
     }
 

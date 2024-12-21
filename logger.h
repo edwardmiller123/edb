@@ -7,6 +7,8 @@ typedef enum LogLevel {
     INFO,
 } LogLevel;
 
+void set_log_level(LogLevel level);
+
 void logger(LogLevel level, const char *message, ...);
 
 #endif
