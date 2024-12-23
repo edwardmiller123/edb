@@ -70,7 +70,7 @@ void logger(LogLevel level, const char *message, ...)
     time(&now);
     char * human_time = ctime(&now);
 
-    // remove the reailing newline
+    // remove the trailing newline
     for (int i = 0; i < strlen(human_time); i++) {
         if (human_time[i] == '\n') {
             human_time[i] = '\0';

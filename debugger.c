@@ -34,7 +34,12 @@ int continue_execution(Debugger *debug)
 		logger(ERROR, "Ptrace failed. ERRNO: %d\n", errno);
 		return -1;
 	}
-	waitpid(debug->pid, &debug->wait_status, 0);
+	int pid_result = waitpid(debug->pid, &debug->wait_status, 0);
+	if (pid_result < 0)
+	{
+		logger(ERROR, "failed to wait for process %d. ERRNO: %d", debug->pid, errno);
+		return 0;
+	}
 }
 
 int parse_command(Debugger *debug, char *input)
@@ -75,14 +80,25 @@ int parse_command(Debugger *debug, char *input)
 // starts the main debugging loop.
 int run_debugger(Debugger *debug)
 {
-	// first pause the child process
 	int options = 0;
-	waitpid(debug->pid, &debug->wait_status, options);
+	// first pause the child process and then check if it has exited
+	int pid_result = waitpid(debug->pid, &debug->wait_status, options);
+	if (pid_result < 0)
+	{
+		logger(ERROR, "failed to wait for process %d. ERRNO: %d", debug->pid, errno);
+		return 0;
+	}
 
 	char line_buf[MAX_LINE_SIZE];
 	char *current_line = NULL;
 	do
 	{
+		// exit if the child process terminates
+		if (debug->wait_status == 0) {
+			logger(INFO, "Program terminated. Exiting debugger.");
+			return 0;
+		}
+
 		fputs("edb> ", stdout);
 		current_line = fgets(line_buf, MAX_LINE_SIZE, stdin);
 
@@ -96,5 +112,6 @@ int run_debugger(Debugger *debug)
 		}
 	} while (current_line != NULL);
 
+	logger(ERROR, "Failed to read line. ERRNO: %d", errno);
 	return -1;
 }
