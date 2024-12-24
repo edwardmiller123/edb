@@ -45,6 +45,8 @@ char *format_string(const char *raw_msg, va_list args, char *formatted_msg)
             formatted_msg[j] = raw_msg[i];
             j++;
         }
+        // finally terminate the string if we havent terminated already
+        formatted_msg[j] = '\0';
     }
     return formatted_msg;
 }

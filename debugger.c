@@ -81,7 +81,7 @@ int parse_command(Debugger *debug, char *input)
 int run_debugger(Debugger *debug)
 {
 	int options = 0;
-	// first pause the child process and then check if it has exited
+	// first pause the child process
 	int pid_result = waitpid(debug->pid, &debug->wait_status, options);
 	if (pid_result < 0)
 	{
