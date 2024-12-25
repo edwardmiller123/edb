@@ -11,6 +11,11 @@ typedef struct BreakPoint {
 	BreakPointType type;
 	int addr;
 	int line;
+	// Is the breakpoint set?
+	int enabled;
+	// The instruction that has been temporarily replaced with the interrupt
+	int saved_data;
+
 } BreakPoint;
 
 typedef struct Debugger {
