@@ -6,6 +6,7 @@
 #include "logger.h"
 
 // Creates a instance of an empty map of string to void pointer
+// TODO: need to handle collisions
 Map *new_map()
 {
     Map *map = malloc(sizeof(Map));
@@ -35,9 +36,11 @@ int hash(char *str)
 }
 
 // Adds an element to the map. Returns -1 if the map is full.
-int m_set(Map * map, char * key, void * elem) {
+int m_set(Map *map, char *key, void *elem)
+{
     int idx = hash(key) % MAX_MAP_SIZE;
-    if (map->size == MAX_MAP_SIZE) {
+    if (map->size == MAX_MAP_SIZE)
+    {
         return -1;
     }
     map->size++;
@@ -45,18 +48,27 @@ int m_set(Map * map, char * key, void * elem) {
     return 0;
 }
 
-void * m_get(Map * map, char * key) {
+void *m_get(Map *map, char *key)
+{
     int idx = hash(key) % MAX_MAP_SIZE;
     return map->data[idx];
 }
 
 // Removes an element from the map. Returns -1 if the map is empty.
-int m_remove(Map * map, char * key) {
-    if (map->size == 0) {
+int m_remove(Map *map, char *key)
+{
+    if (map->size == 0)
+    {
         return -1;
     }
     int idx = hash(key) % MAX_MAP_SIZE;
     map->data[idx] = NULL;
     map->size--;
     return 0;
+}
+
+// Returns 1true if the map is full
+bool m_is_full(Map *map)
+{
+    return map->size >= MAX_MAP_SIZE;
 }
