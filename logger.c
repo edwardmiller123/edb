@@ -36,8 +36,9 @@ char *format_string(const char *raw_msg, va_list args, char *formatted_msg)
                 j += strlen(str_arg_buf);
                 break;
             case 's':
-                formatted_msg = strcat(formatted_msg, va_arg(args, char *));
-                j += strlen(va_arg(args, char *));
+                char * str_arg = va_arg(args, char *);
+                formatted_msg = strcat(formatted_msg, str_arg);
+                j += strlen(str_arg);
                 break;
             }
 

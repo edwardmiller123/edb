@@ -49,7 +49,7 @@ int continue_execution(Debugger *debug)
 
 // Creates a new break point. Returns 1 if the max number of break points has
 // already been reached. Returns -1 for errors.
-int add_break_point(Debugger *debug, char* cmd_arg)
+int add_break_point(Debugger *debug, char *cmd_arg)
 {
 	if (m_is_full(debug->break_points))
 	{
@@ -58,7 +58,8 @@ int add_break_point(Debugger *debug, char* cmd_arg)
 
 	BreakPointType bp_type = LINE;
 	int base = 10;
-	if (has_prefix(cmd_arg, "0x")) {
+	if (has_prefix(cmd_arg, "0x"))
+	{
 		bp_type = ADDR;
 		base = 16;
 	}
@@ -76,7 +77,7 @@ int add_break_point(Debugger *debug, char* cmd_arg)
 	m_set(debug->break_points, cmd_arg, (void *)bp);
 
 	int enable_ret = enable(bp);
-	if (enable < 0)
+	if (enable_ret < 0)
 	{
 		logger(ERROR, "failed to enable breakpoint: %s", cmd_arg);
 		return -1;
@@ -84,7 +85,36 @@ int add_break_point(Debugger *debug, char* cmd_arg)
 	return 0;
 }
 
-int parse_command(Debugger *debug, char *input)
+// Removes the given break point
+int remove_break_point(Debugger *debug, char *cmd_arg)
+{
+	if (m_is_empty(debug->break_points))
+	{
+		return 1;
+	}
+	BreakPoint *bp = (BreakPoint *)m_get(debug->break_points, cmd_arg);
+	if (bp == NULL)
+	{
+		logger(ERROR, "Breakpoint not found.");
+		return 1;
+	}
+
+	int res = disable(bp);
+	if (res < 0)
+	{
+		logger(ERROR, "Failed to disable breakpoint %s.", cmd_arg);
+		return -1;
+	}
+
+	m_remove(debug->break_points, cmd_arg);
+
+	free(bp);
+	return 0;
+}
+
+// Parses and runs the given command. Returns 1 if the command was not recognised
+// and -1 for errors.
+int run_command(Debugger *debug, char *input)
 {
 	char command_parts[MAX_COMMAND_PARTS][MAX_PART_SIZE];
 
@@ -122,6 +152,12 @@ int parse_command(Debugger *debug, char *input)
 	{
 		return add_break_point(debug, first_arg);
 	}
+
+	if (has_prefix(base_command, "del"))
+	{
+		return remove_break_point(debug, first_arg);
+	}
+	return 1;
 }
 
 // starts the main debugging loop.
@@ -148,15 +184,21 @@ int run_debugger(Debugger *debug)
 		}
 
 		fputs("edb> ", stdout);
+		// fgets will stop hanging when either a \n or a EOF is found
 		current_line = fgets(line_buf, MAX_LINE_SIZE, stdin);
 
-		// fgets will stop hanging when either a \n or a EOF is found
-
-		int result = parse_command(debug, current_line);
-		if (result < 0)
+		// Run the command but dont exit on failure
+		int cmd_result = run_command(debug, current_line);
+		switch (cmd_result)
 		{
-			logger(ERROR, "failed to parse command: %s", current_line);
-			return -1;
+		case 1:
+			logger(WARN, "Command not recognised: %s", current_line);
+			break;
+		case -1:
+			logger(ERROR, "failed to run command: %s", current_line);
+			break;
+		default:
+			break;
 		}
 	} while (current_line != NULL);
 

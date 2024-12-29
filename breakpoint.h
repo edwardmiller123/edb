@@ -1,3 +1,8 @@
+#ifndef BP_H
+#define BP_H
+
+#include <stdbool.h>
+
 #define MAX_BREAKPOINTS 64
 
 typedef enum BreakPointType {
@@ -15,7 +20,7 @@ typedef struct BreakPoint {
 	// a line number or a memory address depending on the type.
 	int pos;
 	// Is the breakpoint set?
-	int enabled;
+	bool enabled;
 	// The last byte of the instruction that has been temporarily replaced 
     // with the an interrupt
 	char saved_data;
@@ -26,3 +31,8 @@ BreakPoint * new_bp(int pid, BreakPointType type, int break_pos);
 
 // allows the program to stop when reaching the given instruction
 int enable(BreakPoint * bp);
+
+// disables the given breakpoint
+int disable(BreakPoint *bp);
+
+#endif

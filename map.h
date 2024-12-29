@@ -26,4 +26,7 @@ int m_remove(Map * map, char * key);
 // Returns true if the map is full
 bool m_is_full(Map *map);
 
+// Returns true if the map is empty
+bool m_is_empty(Map *map);
+
 #endif

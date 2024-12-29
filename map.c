@@ -72,3 +72,9 @@ bool m_is_full(Map *map)
 {
     return map->size >= MAX_MAP_SIZE;
 }
+
+// Returns true if the map is empty
+bool m_is_empty(Map *map)
+{
+    return map->size == 0;
+}
