@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <sys/ptrace.h>
 #include <errno.h>
+#include <sys/personality.h>
 
 #include "logger.h"
 #include "debugger.h"
@@ -24,6 +25,13 @@ int main(int argc, char *argv[])
     {
         // we are the child process we should allow the parent to trace us
         // and start executing the program we wish to debug
+
+        int last_persona = personality(ADDR_NO_RANDOMIZE);
+        if (last_persona < 0) {
+            logger(ERROR, "Failed to set child personaility. ERRNO: %d\n", errno);
+            return -1;
+        }
+
         long ptrace_err = ptrace(PTRACE_TRACEME, 0, NULL, NULL);
         if (ptrace_err < 0)
         {
