@@ -179,7 +179,7 @@ int run_debugger(Debugger *debug)
 		// exit if the child process terminates
 		if (debug->wait_status == 0)
 		{
-			logger(INFO, "Program terminated. Exiting debugger.");
+			logger(INFO, "Debugged process %d has terminated", debug->pid);
 			return 0;
 		}
 
@@ -202,6 +202,6 @@ int run_debugger(Debugger *debug)
 		}
 	} while (current_line != NULL);
 
-	logger(ERROR, "Failed to read line. ERRNO: %d", errno);
+	logger(ERROR, "Failed to read line", strerror(errno));
 	return -1;
 }

@@ -36,7 +36,7 @@ int enable(BreakPoint *bp)
         PTraceResult peek_res = ptrace_with_error(PTRACE_PEEKDATA, bp->pid, bp->pos, NULL);
         if (!peek_res.success)
         {
-            logger(ERROR, "failed to get instruction at breakpoint %d");
+            logger(ERROR, "failed to get instruction at breakpoint %d", bp->pos);
             return -1;
         };
 

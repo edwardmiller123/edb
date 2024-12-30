@@ -6,6 +6,7 @@
 
 #include "logger.h"
 #include "debugger.h"
+#include "utils.h"
 
 int main(int argc, char *argv[])
 {
@@ -32,10 +33,9 @@ int main(int argc, char *argv[])
             return -1;
         }
 
-        long ptrace_err = ptrace(PTRACE_TRACEME, 0, NULL, NULL);
-        if (ptrace_err < 0)
+        PTraceResult trace_res = ptrace_with_error(PTRACE_TRACEME, 0, NULL, NULL);
+        if (!trace_res.success)
         {
-            logger(ERROR, "Ptrace failed. ERRNO: %d\n", errno);
             return -1;
         }
 
@@ -53,11 +53,11 @@ int main(int argc, char *argv[])
         logger(INFO, "Started debugging process with pid %d", pid);
         int debug_err = run_debugger(debugger);
         if (debug_err < 0) {
-            logger(ERROR, "Debugger exited. ERRNO: %d\n", errno);
+            logger(ERROR, "Debugger exited early");
             return -1;
         }
        
     }
-
+    logger(INFO, "Exiting");
     return 0;
 }
