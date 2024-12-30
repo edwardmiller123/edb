@@ -20,7 +20,7 @@ Debugger *new_debugger(int pid)
 	Debugger *debugger = (Debugger *)malloc(sizeof(Debugger));
 	if (debugger == NULL)
 	{
-		logger(ERROR, "Failed to allocate heap memory for debugger. ERRNO: %d", errno);
+		logger(ERROR, "Failed to allocate heap memory for debugger. %s", strerror(errno));
 		return NULL;
 	}
 	debugger->pid = pid;
@@ -33,16 +33,16 @@ Debugger *new_debugger(int pid)
 // Restarts a paused process
 int continue_execution(Debugger *debug)
 {
-	long ptrace_err = ptrace(PTRACE_CONT, debug->pid, NULL, NULL);
-	if (ptrace_err < 0)
+	PTraceResult cont_res = ptrace_with_error(PTRACE_CONT, debug->pid, NULL, NULL);
+	if (!cont_res.success)
 	{
-		logger(ERROR, "Ptrace failed. ERRNO: %d\n", errno);
 		return -1;
 	}
+
 	int pid_result = waitpid(debug->pid, &debug->wait_status, 0);
 	if (pid_result < 0)
 	{
-		logger(ERROR, "failed to wait for process %d. ERRNO: %d", debug->pid, errno);
+		logger(ERROR, "failed to wait for process %d. %s", debug->pid, strerror(errno));
 		return 0;
 	}
 }
@@ -168,7 +168,7 @@ int run_debugger(Debugger *debug)
 	int pid_result = waitpid(debug->pid, &debug->wait_status, options);
 	if (pid_result < 0)
 	{
-		logger(ERROR, "failed to wait for process %d. ERRNO: %d", debug->pid, errno);
+		logger(ERROR, "failed to wait for process %d. %s", debug->pid, strerror(errno));
 		return 0;
 	}
 
