@@ -10,6 +10,7 @@
 #include "debugger.h"
 #include "map.h"
 #include "utils.h"
+#include "reg.h"
 
 #define MAX_LINE_SIZE 64
 #define MAX_COMMAND_PARTS 5
@@ -28,23 +29,6 @@ Debugger *new_debugger(int pid)
 	Map *break_points = new_map();
 	debugger->break_points = break_points;
 	return debugger;
-}
-
-// Restarts a paused process
-int continue_execution(Debugger *debug)
-{
-	PTraceResult cont_res = ptrace_with_error(PTRACE_CONT, debug->pid, NULL, NULL);
-	if (!cont_res.success)
-	{
-		return -1;
-	}
-
-	int pid_result = waitpid(debug->pid, &debug->wait_status, 0);
-	if (pid_result < 0)
-	{
-		logger(ERROR, "failed to wait for process %d. %s", debug->pid, strerror(errno));
-		return 0;
-	}
 }
 
 // Creates a new break point. Returns 1 if the max number of break points has
@@ -109,6 +93,94 @@ int remove_break_point(Debugger *debug, char *cmd_arg)
 	m_remove(debug->break_points, cmd_arg);
 
 	free(bp);
+	return 0;
+}
+
+// Checks the current instruction for a break point and steps over it if one exists
+int step_over_breakpoint(Debugger *debug)
+{
+	// use the instruction pointer to check for break points and if one is found
+	// we temporarily disable it.
+
+	// TODO: Why is this failing
+	int current_instruction_addr = get_ip(debug->pid);
+	if (current_instruction_addr == -1)
+	{
+		logger(ERROR, "failed to get instruction pointer");
+		return -1;
+	}
+
+	int last_instruction_addr = current_instruction_addr - 1;
+
+	// check for break point at that address
+	char bp_key[MAX_KEY_SIZE];
+	sprintf(bp_key, "0x%04x", last_instruction_addr);
+
+	BreakPoint *bp = (BreakPoint *)m_get(debug->break_points, bp_key);
+
+	if (bp == NULL)
+	{
+		return 0;
+	}
+
+	if (!bp->enabled)
+	{
+		return 0;
+	}
+
+	int set_ip_res = set_ip(debug->pid, last_instruction_addr);
+	if (set_ip_res == -1)
+	{
+		logger(ERROR, "failed to set instruction pointer");
+		return -1;
+	}
+
+	int dis_res = disable(bp);
+	if (dis_res == -1)
+	{
+		logger(ERROR, "failed to disable breakpoint %s", bp_key);
+		return -1;
+	}
+
+	int pid_res = waitpid(debug->pid, &debug->wait_status, 0);
+	if (pid_res == -1)
+	{
+		logger(ERROR, "failed to wait for process %d. %s", debug->pid, strerror(errno));
+		return -1;
+	}
+
+	int en_res = enable(bp);
+	if (en_res == -1)
+	{
+		logger(ERROR, "failed to re-enable breakpoint %s", bp_key);
+		return -1;
+	}
+
+	return 0;
+}
+
+// Restarts a paused process
+int continue_execution(Debugger *debug)
+{
+	int step_err = step_over_breakpoint(debug);
+	if (step_err == -1)
+	{
+		logger(ERROR, "failed to step over breakpoints");
+		return -1;
+	}
+
+	ErrResult cont_res = ptrace_with_error(PTRACE_CONT, debug->pid, NULL, NULL);
+	if (!cont_res.success)
+	{
+		return -1;
+	}
+
+	int pid_result = waitpid(debug->pid, &debug->wait_status, 0);
+	if (pid_result == -1)
+	{
+		logger(ERROR, "failed to wait for process %d. %s", debug->pid, strerror(errno));
+		return -1;
+	}
 	return 0;
 }
 

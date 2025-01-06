@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
             return -1;
         }
 
-        PTraceResult trace_res = ptrace_with_error(PTRACE_TRACEME, 0, NULL, NULL);
+        ErrResult trace_res = ptrace_with_error(PTRACE_TRACEME, 0, NULL, NULL);
         if (!trace_res.success)
         {
             return -1;
@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
         int exec_err = execl(program, program, (char *)NULL);
         if (exec_err < 0)
         {
-            logger(ERROR, "Failed to run %s. ERRNO: %d\n", program, errno);
+            logger(ERROR, "Failed to run %s. %s\n", program, strerror(errno));
             return -1;
         }
     }

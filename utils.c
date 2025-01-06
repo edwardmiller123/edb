@@ -13,7 +13,7 @@ bool has_prefix(char *target, char *prefix)
 
 // Wraps ptrace with error handling by checking the value of errno. Returns a PtraceResult
 // which conrtains the value and whether the call succeeded.
-PTraceResult ptrace_with_error(enum __ptrace_request req, int pid, int addr, int data)
+ErrResult ptrace_with_error(enum __ptrace_request req, int pid, int addr, int data)
 {
     bool success = true;
     errno = 0;
@@ -23,6 +23,6 @@ PTraceResult ptrace_with_error(enum __ptrace_request req, int pid, int addr, int
         logger(ERROR, "ptrace failed: %s", strerror(errno));
         success = false;
     }
-    PTraceResult res = {.val = val, .success = success};
+    ErrResult res = {.val = val, .success = success};
     return res;
 }
