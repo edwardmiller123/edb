@@ -103,7 +103,6 @@ int step_over_breakpoint(Debugger *debug)
 	// use the instruction pointer to check for break points and if one is found
 	// we temporarily disable it.
 
-	// TODO: Why is this failing
 	int current_instruction_addr = get_ip(debug->pid);
 	if (current_instruction_addr == -1)
 	{
