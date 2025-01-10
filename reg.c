@@ -46,68 +46,155 @@ const reg_info registers[REGISTER_COUNT] = {
 	{FS, "fs", 54},
 	{GS, "gs", 55}};
 
-// Returns the value of the given register
-ErrResult get_reg_value(int pid, Reg reg)
+// Retrieves the value of the given register. Returns a pointer to the register's
+// position in the given struct;
+unsigned long long *get_register(int pid, struct user_regs_struct *regs, Reg reg)
 {
-	ErrResult res;
-	// first get all the registers
-	struct user_regs_struct regs;
-	ErrResult regs_res = ptrace_with_error(PTRACE_GETREGS, pid, NULL, (int)&regs);
+	ErrResult regs_res = ptrace_with_error(PTRACE_GETREGS, pid, NULL, (void *)regs);
 	if (!regs_res.success)
 	{
 		logger(ERROR, "failed to get register values");
-		res.success = false;
-		return res;
+		return NULL;
 	}
-
-	// "index" into the struct to return the value of the requested register.
-	int reg_address = (int)&regs;
-	res.val = *(int *)(reg_address + ((int)reg * sizeof(int)));
-	res.success = true;
-	return res;
+	switch (reg)
+	{
+	case R15:
+		return &regs->r15;
+		break;
+	case R14:
+		return &regs->r14;
+		break;
+	case R13:
+		return &regs->r13;
+		break;
+	case R12:
+		return &regs->r12;
+		break;
+	case R11:
+		return &regs->r11;
+		break;
+	case R10:
+		return &regs->r10;
+		break;
+	case R9:
+		return &regs->r9;
+		break;
+	case R8:
+		return &regs->r8;
+		break;
+	case RBP:
+		return &regs->rbp;
+		break;
+	case RBX:
+		return &regs->rbx;
+		break;
+	case RAX:
+		return &regs->rax;
+		break;
+	case RCX:
+		return &regs->rcx;
+		break;
+	case RDX:
+		return &regs->rdx;
+		break;
+	case RSI:
+		return &regs->rsi;
+		break;
+	case RDI:
+		return &regs->rdi;
+		break;
+	case ORIG_RAX:
+		return &regs->orig_rax;
+		break;
+	case RIP:
+		return &regs->rip;
+		break;
+	case CS:
+		return &regs->cs;
+		break;
+	case EFLAGS:
+		return &regs->eflags;
+		break;
+	case RSP:
+		return &regs->r13;
+		break;
+	case SS:
+		return &regs->ss;
+		break;
+	case FS_BASE:
+		return &regs->fs_base;
+		break;
+	case GS_BASE:
+		return &regs->gs_base;
+		break;
+	case DS:
+		return &regs->ds;
+		break;
+	case FS:
+		return &regs->fs;
+		break;
+	case ES:
+		return &regs->es;
+		break;
+	case GS:
+		return &regs->gs;
+		break;
+	default:
+		return NULL;
+	}
 }
 
-// Gets the value of a given register.
+// Gets the value of a given register by its name
 ErrResult get_reg_value_by_name(int pid, char *reg_name)
 {
-	ErrResult res;
-	res.success = false;
+	ErrResult res = {.success = false};
+
 	if (reg_name == NULL)
 	{
 		logger(ERROR, "register name must not be NULL");
 		return res;
 	}
 
+	struct user_regs_struct regs;
+
 	for (int i = 0; i < REGISTER_COUNT; i++)
 	{
 		if (strcmp(registers[i].name, reg_name) == 0)
 		{
-			return get_reg_value(pid, registers[i].id);
+			int *reg = (int *)get_register(pid, &regs, registers[i].id);
+			if (reg == NULL)
+			{
+				logger(ERROR, "Failed to get register");
+			}
+			else
+			{
+				res.success = true;
+				res.val = *reg;
+			}
+			return res;
 		}
 	}
+	logger(WARN, "Unknown register");
 	return res;
 }
 
 // set the value of the given register
 int set_reg_value(int pid, Reg reg, int val)
 {
-	// get all the registers
 	struct user_regs_struct regs;
-	ErrResult get_regs_res = ptrace_with_error(PTRACE_GETREGS, pid, NULL, (int)&regs);
-	if (!get_regs_res.success)
+
+	int *reg_addr = (int *)get_register(pid, &regs, reg);
+	if (reg_addr == NULL)
 	{
-		logger(ERROR, "Failed to get register values");
+		logger(ERROR, "Failed to get register");
 		return -1;
 	}
 
-	// "index" into the struct to return the value of the requested register.
-	int reg_address = (int)&regs;
-
 	// set the value
-	*(int *)(reg_address + ((int)reg * sizeof(int))) = val;
+	*reg_addr = val;
 
 	// write the result back
-	ErrResult set_regs_res = ptrace_with_error(PTRACE_SETREGS, pid, NULL, (int)&regs);
+	ErrResult set_regs_res = ptrace_with_error(PTRACE_SETREGS, pid, NULL, (void *)&regs);
 	if (!set_regs_res.success)
 	{
 		logger(ERROR, "Failed to set register values");
@@ -132,20 +219,22 @@ int set_reg_value_by_name(int pid, char *reg_name, int val)
 			return set_reg_value(pid, registers[i].id, val);
 		}
 	}
-	logger(ERROR, "failed to identify register to set");
+	logger(WARN, "Unknown register name");
 	return -1;
 }
 
 // gets the value of the instruction pointer
 int get_ip(int pid)
 {
-	ErrResult res = get_reg_value(pid, RIP);
-	if (!res.success)
+	struct user_regs_struct regs;
+	int *reg = (int*)get_register(pid, &regs, RIP);
+	if (reg == NULL)
 	{
-		// value from RIP shouldnt ever ber negative so can safely return an int
+		logger(ERROR, "Faled to get instruction pointer");
+		// value from RIP shouldnt ever be negative so can safely return -1 for errors
 		return -1;
 	}
-	return res.val;
+	return *reg;
 }
 
 // sets the value of the instruction pointer

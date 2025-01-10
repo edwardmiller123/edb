@@ -3,6 +3,7 @@
 #include <sys/ptrace.h>
 #include <errno.h>
 #include <sys/personality.h>
+#include <string.h>
 
 #include "logger.h"
 #include "debugger.h"
@@ -36,10 +37,11 @@ int main(int argc, char *argv[])
         ErrResult trace_res = ptrace_with_error(PTRACE_TRACEME, 0, NULL, NULL);
         if (!trace_res.success)
         {
+            logger(ERROR, "Failed to start tracing child");
             return -1;
         }
 
-        int exec_err = execl(program, program, (char *)NULL);
+        int exec_err = execl(program, program, NULL);
         if (exec_err < 0)
         {
             logger(ERROR, "Failed to run %s. %s\n", program, strerror(errno));

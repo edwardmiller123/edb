@@ -15,6 +15,7 @@
 #define MAX_LINE_SIZE 64
 #define MAX_COMMAND_PARTS 5
 #define MAX_PART_SIZE 32
+#define WAIT_OPTIONS 0
 
 Debugger *new_debugger(int pid)
 {
@@ -142,7 +143,14 @@ int step_over_breakpoint(Debugger *debug)
 		return -1;
 	}
 
-	int pid_res = waitpid(debug->pid, &debug->wait_status, 0);
+	ErrResult step_res = ptrace_with_error(PTRACE_SINGLESTEP, debug->pid, NULL, NULL);
+	if (!step_res.success)
+	{
+		logger(ERROR, "failed stepping to next instruction");
+		return -1;
+	}
+
+	int pid_res = waitpid(debug->pid, &debug->wait_status, WAIT_OPTIONS);
 	if (pid_res == -1)
 	{
 		logger(ERROR, "failed to wait for process %d. %s", debug->pid, strerror(errno));
@@ -175,7 +183,7 @@ int continue_execution(Debugger *debug)
 		return -1;
 	}
 
-	int pid_result = waitpid(debug->pid, &debug->wait_status, 0);
+	int pid_result = waitpid(debug->pid, &debug->wait_status, WAIT_OPTIONS);
 	if (pid_result == -1)
 	{
 		logger(ERROR, "failed to wait for process %d. %s", debug->pid, strerror(errno));
@@ -235,9 +243,8 @@ int run_command(Debugger *debug, char *input)
 // starts the main debugging loop.
 int run_debugger(Debugger *debug)
 {
-	int options = 0;
-	// first pause the child process
-	int pid_result = waitpid(debug->pid, &debug->wait_status, options);
+	// wait until child process is executing
+	int pid_result = waitpid(debug->pid, &debug->wait_status, WAIT_OPTIONS);
 	if (pid_result < 0)
 	{
 		logger(ERROR, "failed to wait for process %d. %s", debug->pid, strerror(errno));

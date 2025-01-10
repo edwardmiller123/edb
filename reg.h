@@ -3,8 +3,7 @@
 
 #include "utils.h"
 
-// x86 Register identifiers. They are in the same order as the user_reg_struct so that it can
-// be treated as an array and we can use the numerical value of the enum as the index.
+// x86 Register identifiers.
 typedef enum Reg {
 	R15,
 	R14,
@@ -35,8 +34,9 @@ typedef enum Reg {
 	GS,
 } Reg;
 
-// Returns the value of the given register
-ErrResult get_reg_value(int pid, Reg reg);
+// Retrieves the value of the given register. Returns a pointer to the register's
+// position in the given struct;
+unsigned long long * get_register(int pid, struct user_regs_struct * regs, Reg reg);
 
 // Gets the value of a given register by its name. Returns -1 if the requested register is
 // not found.

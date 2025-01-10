@@ -33,7 +33,7 @@ int enable(BreakPoint *bp)
     {
     case ADDR:
         // get the instruction at the specified address
-        ErrResult peek_res = ptrace_with_error(PTRACE_PEEKDATA, bp->pid, bp->pos, NULL);
+        ErrResult peek_res = ptrace_with_error(PTRACE_PEEKDATA, bp->pid, (void *)bp->pos, NULL);
         if (!peek_res.success)
         {
             logger(ERROR, "failed to get instruction at breakpoint %d", bp->pos);
@@ -47,7 +47,7 @@ int enable(BreakPoint *bp)
         // insert the interrupt into the instruction
         int int3_instruction = ((instruction & ~0xff) | int_3);
 
-        ErrResult poke_res = ptrace_with_error(PTRACE_POKEDATA, bp->pid, bp->pos, int3_instruction);
+        ErrResult poke_res = ptrace_with_error(PTRACE_POKEDATA, bp->pid, (void *)bp->pos, (void *)int3_instruction);
         if (!poke_res.success)
         {
             logger(ERROR, "failed to write interrupt at breakpoint %d", bp->pos);
@@ -66,14 +66,13 @@ int enable(BreakPoint *bp)
 // Returns -1 for errors.
 int disable(BreakPoint *bp)
 {
-
     if (!bp->enabled)
     {
         return 1;
     }
 
     // get the edited instruction
-    ErrResult peek_res = ptrace_with_error(PTRACE_PEEKDATA, bp->pid, bp->pos, NULL);
+    ErrResult peek_res = ptrace_with_error(PTRACE_PEEKDATA, bp->pid, (void *)bp->pos, NULL);
     if (!peek_res.success)
     {
         logger(ERROR, "failed to get instruction at breakpoint %d", bp->pos);
@@ -85,7 +84,7 @@ int disable(BreakPoint *bp)
     int restored_instruction = ((old_instruction & ~0xff) | bp->saved_data);
 
     // write back the restored instruction
-    ErrResult poke_res = ptrace_with_error(PTRACE_POKEDATA, bp->pid, bp->pos, restored_instruction);
+    ErrResult poke_res = ptrace_with_error(PTRACE_POKEDATA, bp->pid, (void *)bp->pos, (void *)restored_instruction);
     if (poke_res.success)
     {
         logger(ERROR, "failed to restore instruction at breakpoint %d", bp->pos);
