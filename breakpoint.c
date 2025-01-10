@@ -85,9 +85,9 @@ int disable(BreakPoint *bp)
 
     // write back the restored instruction
     ErrResult poke_res = ptrace_with_error(PTRACE_POKEDATA, bp->pid, (void *)bp->pos, (void *)restored_instruction);
-    if (poke_res.success)
+    if (!poke_res.success)
     {
-        logger(ERROR, "failed to restore instruction at breakpoint %d", bp->pos);
+        logger(ERROR, "failed to restore instruction at address %d", bp->pos);
         return -1;
     };
 
