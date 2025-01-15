@@ -103,18 +103,18 @@ int step_over_breakpoint(Debugger *debug)
 	// use the instruction pointer to check for break points and if one is found
 	// we temporarily disable it.
 
-	int current_instruction_addr = get_ip(debug->pid);
-	if (current_instruction_addr == -1)
+	void * next_instruction_addr = get_ip(debug->pid);
+	if (next_instruction_addr == NULL)
 	{
 		logger(ERROR, "failed to get instruction pointer");
 		return -1;
 	}
 
-	int last_instruction_addr = current_instruction_addr - 1;
+	void * current_instruction_addr = next_instruction_addr - 1;
 
 	// check for break point at that address
 	char bp_key[MAX_KEY_SIZE];
-	sprintf(bp_key, "0x%04x", last_instruction_addr);
+	sprintf(bp_key, "%p", current_instruction_addr);
 
 	BreakPoint *bp = (BreakPoint *)m_get(debug->break_points, bp_key);
 
@@ -128,7 +128,7 @@ int step_over_breakpoint(Debugger *debug)
 		return 0;
 	}
 
-	int set_ip_res = set_ip(debug->pid, last_instruction_addr);
+	int set_ip_res = set_ip(debug->pid, current_instruction_addr);
 	if (set_ip_res == -1)
 	{
 		logger(ERROR, "failed to set instruction pointer");

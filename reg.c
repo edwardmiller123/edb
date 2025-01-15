@@ -1,5 +1,4 @@
 #include <stdlib.h>
-#include <sys/user.h>
 #include <sys/ptrace.h>
 #include <string.h>
 
@@ -179,11 +178,11 @@ ErrResult get_reg_value_by_name(int pid, char *reg_name)
 }
 
 // set the value of the given register
-int set_reg_value(int pid, Reg reg, int val)
+int set_reg_value(int pid, Reg reg, unsigned long long val)
 {
 	struct user_regs_struct regs;
 
-	int *reg_addr = (int *)get_register(pid, &regs, reg);
+	unsigned long long *reg_addr = get_register(pid, &regs, reg);
 	if (reg_addr == NULL)
 	{
 		logger(ERROR, "Failed to get register");
@@ -223,22 +222,24 @@ int set_reg_value_by_name(int pid, char *reg_name, int val)
 	return -1;
 }
 
-// gets the value of the instruction pointer
-int get_ip(int pid)
+// Gets the value of the instruction pointer. Returns NULL for errors
+void * get_ip(int pid)
 {
+	// Get register returns a pointer to the register value. In the case of RIP this value is itself
+	// a memory address so we cast it to a void pointer to make this obvious to the caller.
 	struct user_regs_struct regs;
-	int *reg = (int*)get_register(pid, &regs, RIP);
+	unsigned long long *reg = get_register(pid, &regs, RIP);
 	if (reg == NULL)
 	{
-		logger(ERROR, "Faled to get instruction pointer");
-		// value from RIP shouldnt ever be negative so can safely return -1 for errors
-		return -1;
+		logger(ERROR, "Failed to get instruction pointer");
+		// value from RIP shouldnt ever 0 so can return NULL for errors
+		return NULL;
 	}
-	return *reg;
+	return (void *)*reg;
 }
 
-// sets the value of the instruction pointer
-int set_ip(int pid, int val)
+// sets the value of the instruction pointer (this is always a memory address so takes a void pointer)
+int set_ip(int pid, void * val)
 {
-	return set_reg_value(pid, RIP, val);
+	return set_reg_value(pid, RIP, (unsigned long long)val);
 }

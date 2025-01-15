@@ -40,12 +40,13 @@ int enable(BreakPoint *bp)
             return -1;
         };
 
-        int instruction = peek_res.val;
+        unsigned int instruction = (unsigned int)peek_res.val;
 
         // save the first byte of the instruction so we can restore it later
-        bp->saved_data = (char)(instruction & 0xff);
+        bp->saved_data = (char)(instruction & (unsigned int)0xff);
+
         // insert the interrupt into the instruction
-        int int3_instruction = ((instruction & ~0xff) | int_3);
+        unsigned int int3_instruction = ((instruction & ~0xff) | (unsigned int)int_3);
 
         ErrResult poke_res = ptrace_with_error(PTRACE_POKEDATA, bp->pid, (void *)bp->pos, (void *)int3_instruction);
         if (!poke_res.success)
@@ -79,9 +80,13 @@ int disable(BreakPoint *bp)
         return -1;
     };
 
-    int old_instruction = peek_res.val;
+    unsigned int current_instruction = (unsigned int)peek_res.val;
 
-    int restored_instruction = ((old_instruction & ~0xff) | bp->saved_data);
+    // zero the last byte containing our injected int3 
+    unsigned int current_intstruction_zeroed = (unsigned int)(current_instruction & ~0xff);
+
+    // restore the saved byte of the instruction making sure to first zero al the unessecary bits
+    unsigned int restored_instruction = current_intstruction_zeroed | ((unsigned int)bp->saved_data & 0xff);
 
     // write back the restored instruction
     ErrResult poke_res = ptrace_with_error(PTRACE_POKEDATA, bp->pid, (void *)bp->pos, (void *)restored_instruction);

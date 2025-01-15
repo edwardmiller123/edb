@@ -1,6 +1,8 @@
 #ifndef REG_H
 #define REG_H
 
+#include <sys/user.h>
+
 #include "utils.h"
 
 // x86 Register identifiers.
@@ -43,15 +45,15 @@ unsigned long long * get_register(int pid, struct user_regs_struct * regs, Reg r
 ErrResult get_reg_value_by_name(int pid, char *reg_name);
 
 // set the value of the given register
-int set_reg_value(int pid, Reg reg, int val);
+int set_reg_value(int pid, Reg reg, unsigned long long val);
 
 // sets the value of the given register by its name
 int set_reg_value_by_name(int pid, char *reg_name, int val);
 
-// gets the value of the instruction pointer
-int get_ip(int pid);
+// Gets the value of the instruction pointer. Returns NULL for errors
+void * get_ip(int pid);
 
-// sets the value of the instruction pointer
-int set_ip(int pid, int val);
+// sets the value of the instruction pointer (this is always a memory address so takes a void pointer)
+int set_ip(int pid, void * val);
 
 #endif
