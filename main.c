@@ -11,7 +11,7 @@
 
 int main(int argc, char *argv[])
 {
-    set_log_level(INFO);
+    set_log_level(DEBUG);
 
     if (argc < 2)
     {

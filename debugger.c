@@ -106,11 +106,13 @@ int step_over_breakpoint(Debugger *debug)
 	void * next_instruction_addr = get_ip(debug->pid);
 	if (next_instruction_addr == NULL)
 	{
-		logger(ERROR, "failed to get instruction pointer");
+		logger(ERROR, "Failed to get instruction pointer");
 		return -1;
 	}
 
 	void * current_instruction_addr = next_instruction_addr - 1;
+
+	logger(DEBUG, "Checking for breakpoint at address %p", current_instruction_addr);
 
 	// check for break point at that address
 	char bp_key[MAX_KEY_SIZE];
@@ -128,12 +130,16 @@ int step_over_breakpoint(Debugger *debug)
 		return 0;
 	}
 
+	logger(DEBUG, "Found breakpoint: %s", bp_key);
+
 	int set_ip_res = set_ip(debug->pid, current_instruction_addr);
 	if (set_ip_res == -1)
 	{
 		logger(ERROR, "failed to set instruction pointer");
 		return -1;
 	}
+
+	logger(DEBUG, "RIP set to %p", current_instruction_addr);
 
 	int dis_res = disable(bp);
 	if (dis_res == -1)

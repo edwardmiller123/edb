@@ -5,6 +5,7 @@ typedef enum LogLevel {
     ERROR,
     WARN,
     INFO,
+    DEBUG
 } LogLevel;
 
 void set_log_level(LogLevel level);

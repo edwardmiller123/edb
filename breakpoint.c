@@ -36,14 +36,16 @@ int enable(BreakPoint *bp)
         ErrResult peek_res = ptrace_with_error(PTRACE_PEEKDATA, bp->pid, (void *)bp->pos, NULL);
         if (!peek_res.success)
         {
-            logger(ERROR, "failed to get instruction at breakpoint %d", bp->pos);
+            logger(ERROR, "Failed to get instruction at breakpoint %d", bp->pos);
             return -1;
         };
 
         unsigned int instruction = (unsigned int)peek_res.val;
+        logger(DEBUG, "Inserting breakpoint at %p. Editing instruction %p", (void *)bp->pos, (void *)instruction);
 
         // save the first byte of the instruction so we can restore it later
         bp->saved_data = (char)(instruction & (unsigned int)0xff);
+        logger(DEBUG, "Saving byte %p", (void *)(bp->saved_data & 0xff));
 
         // insert the interrupt into the instruction
         unsigned int int3_instruction = ((instruction & ~0xff) | (unsigned int)int_3);
@@ -51,7 +53,7 @@ int enable(BreakPoint *bp)
         ErrResult poke_res = ptrace_with_error(PTRACE_POKEDATA, bp->pid, (void *)bp->pos, (void *)int3_instruction);
         if (!poke_res.success)
         {
-            logger(ERROR, "failed to write interrupt at breakpoint %d", bp->pos);
+            logger(ERROR, "Failed to insert interrupt at breakpoint %d", bp->pos);
             return -1;
         };
 
@@ -76,7 +78,7 @@ int disable(BreakPoint *bp)
     ErrResult peek_res = ptrace_with_error(PTRACE_PEEKDATA, bp->pid, (void *)bp->pos, NULL);
     if (!peek_res.success)
     {
-        logger(ERROR, "failed to get instruction at breakpoint %d", bp->pos);
+        logger(ERROR, "Failed to get instruction at breakpoint %d", bp->pos);
         return -1;
     };
 
@@ -88,11 +90,13 @@ int disable(BreakPoint *bp)
     // restore the saved byte of the instruction making sure to first zero al the unessecary bits
     unsigned int restored_instruction = current_intstruction_zeroed | ((unsigned int)bp->saved_data & 0xff);
 
+    logger(DEBUG, "Restoring break point instruction: %p", (void *) restored_instruction);
+
     // write back the restored instruction
     ErrResult poke_res = ptrace_with_error(PTRACE_POKEDATA, bp->pid, (void *)bp->pos, (void *)restored_instruction);
     if (!poke_res.success)
     {
-        logger(ERROR, "failed to restore instruction at address %d", bp->pos);
+        logger(ERROR, "Failed to restore instruction at address %d", bp->pos);
         return -1;
     };
 
