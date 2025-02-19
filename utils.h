@@ -9,7 +9,7 @@ bool has_prefix(char *prefix, char *target);
 // helper struct to allow errors to be returned if the return value
 // could be negative
 typedef struct ErrResult {
-	int val;
+	long val;
 	bool success;
 } ErrResult;
 

@@ -18,7 +18,7 @@ typedef struct BreakPoint {
 	BreakPointType type;
 	// The position in the program we should break at. Can either be
 	// a line number or a memory address depending on the type.
-	int pos;
+	unsigned int pos;
 	// Is the breakpoint set?
 	bool enabled;
 	// The last byte of the instruction that has been temporarily replaced 
@@ -27,7 +27,7 @@ typedef struct BreakPoint {
 
 } BreakPoint;
 
-BreakPoint * new_bp(int pid, BreakPointType type, int break_pos);
+BreakPoint * new_bp(int pid, BreakPointType type, unsigned int break_pos);
 
 // allows the program to stop when reaching the given instruction
 int enable(BreakPoint * bp);

@@ -49,7 +49,7 @@ int add_break_point(Debugger *debug, char *cmd_arg)
 		base = 16;
 	}
 
-	int pos = strtoll(cmd_arg, NULL, base);
+	unsigned int pos = strtoll(cmd_arg, NULL, base);
 
 	BreakPoint *bp = new_bp(debug->pid, bp_type, pos);
 	if (bp == NULL)
@@ -112,7 +112,7 @@ int step_over_breakpoint(Debugger *debug)
 
 	void * current_instruction_addr = next_instruction_addr - 1;
 
-	logger(DEBUG, "Checking for breakpoint at address %p", current_instruction_addr);
+	logger(DEBUG, "Checking for breakpoint at address %p. RIP at %p", current_instruction_addr, next_instruction_addr);
 
 	// check for break point at that address
 	char bp_key[MAX_KEY_SIZE];

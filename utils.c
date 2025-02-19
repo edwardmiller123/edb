@@ -17,7 +17,7 @@ ErrResult ptrace_with_error(enum __ptrace_request req, int pid, void * addr, voi
 {
     bool success = true;
     errno = 0;
-    int val = ptrace(req, pid, addr, data);
+    long val = ptrace(req, pid, addr, data);
     if (errno != 0)
     {
         logger(ERROR, "ptrace failed: %s", strerror(errno));
