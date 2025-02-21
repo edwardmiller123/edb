@@ -1,11 +1,16 @@
 #include "map.h"
 
-typedef struct Debugger {
+typedef struct DebugSession {
+	char * prog;
 	int pid;
 	int wait_status;
+} DebugSession;
+
+typedef struct Debugger {
+	DebugSession * session;
 	Map * break_points;
 } Debugger;
 
-Debugger * new_debugger(int pid);
+Debugger * new_debugger();
 
-int run_debugger(Debugger * debug);
+int run_cmd_loop(Debugger *db, const char * prog);

@@ -1,9 +1,11 @@
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <sys/ptrace.h>
+#include <sys/personality.h>
 
 #include "logger.h"
 #include "breakpoint.h"
@@ -17,7 +19,24 @@
 #define MAX_PART_SIZE 32
 #define WAIT_OPTIONS 0
 
-Debugger *new_debugger(int pid)
+// The magic number to exit the program
+#define EXIT -73
+
+DebugSession *new_debug_session(char *prog, int pid)
+{
+	DebugSession *dbs = (DebugSession *)malloc(sizeof(DebugSession));
+	if (dbs == NULL)
+	{
+		logger(ERROR, "Failed to allocate heap memory for debug session. %s", strerror(errno));
+		return NULL;
+	}
+	dbs->prog = prog;
+	dbs->pid = pid;
+	dbs->wait_status = 0;
+	return dbs;
+}
+
+Debugger *new_debugger()
 {
 	Debugger *debugger = (Debugger *)malloc(sizeof(Debugger));
 	if (debugger == NULL)
@@ -25,18 +44,24 @@ Debugger *new_debugger(int pid)
 		logger(ERROR, "Failed to allocate heap memory for debugger. %s", strerror(errno));
 		return NULL;
 	}
-	debugger->pid = pid;
-	debugger->wait_status = 0;
+
 	Map *break_points = new_map();
 	debugger->break_points = break_points;
+	debugger->session = NULL;
 	return debugger;
 }
 
 // Creates a new break point. Returns 1 if the max number of break points has
 // already been reached. Returns -1 for errors.
-int add_break_point(Debugger *debug, char *cmd_arg)
+int add_break_point(Debugger *db, char *cmd_arg)
 {
-	if (m_is_full(debug->break_points))
+	if (db->session == NULL)
+	{
+		logger(WARN, "No active debugging session.");
+		return 0;
+	}
+
+	if (m_is_full(db->break_points))
 	{
 		return 1;
 	}
@@ -51,7 +76,7 @@ int add_break_point(Debugger *debug, char *cmd_arg)
 
 	unsigned int pos = strtoll(cmd_arg, NULL, base);
 
-	BreakPoint *bp = new_bp(debug->pid, bp_type, pos);
+	BreakPoint *bp = new_bp(db->session->pid, bp_type, pos);
 	if (bp == NULL)
 	{
 		logger(ERROR, "failed to create break point %s", cmd_arg);
@@ -59,7 +84,7 @@ int add_break_point(Debugger *debug, char *cmd_arg)
 	}
 
 	// use the line or address of the bp as the key for the map.
-	m_set(debug->break_points, cmd_arg, (void *)bp);
+	m_set(db->break_points, cmd_arg, (void *)bp);
 
 	int enable_ret = enable(bp);
 	if (enable_ret < 0)
@@ -71,13 +96,19 @@ int add_break_point(Debugger *debug, char *cmd_arg)
 }
 
 // Removes the given break point
-int remove_break_point(Debugger *debug, char *cmd_arg)
+int remove_break_point(Debugger *db, char *cmd_arg)
 {
-	if (m_is_empty(debug->break_points))
+	if (db->session == NULL)
+	{
+		logger(WARN, "No active debugging session.");
+		return 0;
+	}
+
+	if (m_is_empty(db->break_points))
 	{
 		return 1;
 	}
-	BreakPoint *bp = (BreakPoint *)m_get(debug->break_points, cmd_arg);
+	BreakPoint *bp = (BreakPoint *)m_get(db->break_points, cmd_arg);
 	if (bp == NULL)
 	{
 		logger(ERROR, "Breakpoint not found.");
@@ -91,26 +122,26 @@ int remove_break_point(Debugger *debug, char *cmd_arg)
 		return -1;
 	}
 
-	m_remove(debug->break_points, cmd_arg);
+	m_remove(db->break_points, cmd_arg);
 
 	free(bp);
 	return 0;
 }
 
 // Checks the current instruction for a break point and steps over it if one exists
-int step_over_breakpoint(Debugger *debug)
+int step_over_breakpoint(Debugger *db)
 {
 	// use the instruction pointer to check for break points and if one is found
 	// we temporarily disable it.
 
-	void * next_instruction_addr = get_ip(debug->pid);
+	void *next_instruction_addr = get_ip(db->session->pid);
 	if (next_instruction_addr == NULL)
 	{
 		logger(ERROR, "Failed to get instruction pointer");
 		return -1;
 	}
 
-	void * current_instruction_addr = next_instruction_addr - 1;
+	void *current_instruction_addr = next_instruction_addr - 1;
 
 	logger(DEBUG, "Checking for breakpoint at address %p. RIP at %p", current_instruction_addr, next_instruction_addr);
 
@@ -118,7 +149,7 @@ int step_over_breakpoint(Debugger *debug)
 	char bp_key[MAX_KEY_SIZE];
 	sprintf(bp_key, "%p", current_instruction_addr);
 
-	BreakPoint *bp = (BreakPoint *)m_get(debug->break_points, bp_key);
+	BreakPoint *bp = (BreakPoint *)m_get(db->break_points, bp_key);
 
 	if (bp == NULL)
 	{
@@ -132,7 +163,7 @@ int step_over_breakpoint(Debugger *debug)
 
 	logger(DEBUG, "Found breakpoint: %s", bp_key);
 
-	int set_ip_res = set_ip(debug->pid, current_instruction_addr);
+	int set_ip_res = set_ip(db->session->pid, current_instruction_addr);
 	if (set_ip_res == -1)
 	{
 		logger(ERROR, "failed to set instruction pointer");
@@ -148,17 +179,17 @@ int step_over_breakpoint(Debugger *debug)
 		return -1;
 	}
 
-	ErrResult step_res = ptrace_with_error(PTRACE_SINGLESTEP, debug->pid, NULL, NULL);
+	ErrResult step_res = ptrace_with_error(PTRACE_SINGLESTEP, db->session->pid, NULL, NULL);
 	if (!step_res.success)
 	{
 		logger(ERROR, "failed stepping to next instruction");
 		return -1;
 	}
 
-	int pid_res = waitpid(debug->pid, &debug->wait_status, WAIT_OPTIONS);
+	int pid_res = waitpid(db->session->pid, &db->session->wait_status, WAIT_OPTIONS);
 	if (pid_res == -1)
 	{
-		logger(ERROR, "failed to wait for process %d. %s", debug->pid, strerror(errno));
+		logger(ERROR, "failed to wait for process %d. %s", db->session->pid, strerror(errno));
 		return -1;
 	}
 
@@ -173,34 +204,126 @@ int step_over_breakpoint(Debugger *debug)
 }
 
 // Restarts a paused process
-int continue_execution(Debugger *debug)
+int continue_execution(Debugger *db)
 {
-	int step_err = step_over_breakpoint(debug);
+	if (db->session == NULL)
+	{
+		logger(WARN, "No active debugging session.");
+		return 0;
+	}
+
+	int step_err = step_over_breakpoint(db);
 	if (step_err == -1)
 	{
 		logger(ERROR, "failed to step over breakpoints");
 		return -1;
 	}
 
-	ErrResult cont_res = ptrace_with_error(PTRACE_CONT, debug->pid, NULL, NULL);
+	ErrResult cont_res = ptrace_with_error(PTRACE_CONT, db->session->pid, NULL, NULL);
 	if (!cont_res.success)
 	{
 		return -1;
 	}
 
-	int pid_result = waitpid(debug->pid, &debug->wait_status, WAIT_OPTIONS);
+	int pid_result = waitpid(db->session->pid, &db->session->wait_status, WAIT_OPTIONS);
 	if (pid_result == -1)
 	{
-		logger(ERROR, "failed to wait for process %d. %s", debug->pid, strerror(errno));
+		logger(ERROR, "failed to wait for process %d. %s", db->session->pid, strerror(errno));
 		return -1;
 	}
 	return 0;
 }
 
+// Starts a new debugging session by forking the current process and running the given executable.
+int start_debug_session(Debugger *db, char *prog)
+{
+	if (prog == NULL)
+	{
+		logger(WARN, "No executable provided.");
+		return 0;
+	}
+
+	int pid = fork();
+	if (pid == -1)
+	{
+		logger(ERROR, "Failed to fork. ERRNO: %d\n", errno);
+		return -1;
+	}
+
+	if (pid == 0)
+	{
+		// we are the child process we should allow the parent to trace us
+		// and start executing the program we wish to debug.
+
+		// We return the EXIT code on any errors so that the child process terminates and
+		// isnt left hanging around.
+
+		int last_persona = personality(ADDR_NO_RANDOMIZE);
+		if (last_persona < 0)
+		{
+			logger(ERROR, "Failed to set child personaility. ERRNO: %d\n", errno);
+			return EXIT;
+		}
+
+		ErrResult trace_res = ptrace_with_error(PTRACE_TRACEME, 0, NULL, NULL);
+		if (!trace_res.success)
+		{
+			logger(ERROR, "Failed to start tracing child.");
+			return EXIT;
+		}
+
+		int exec_err = execl(prog, prog, NULL);
+		if (exec_err < 0)
+		{
+			logger(ERROR, "Failed to execute %s. %s\n", prog, strerror(errno));
+			return EXIT;
+		}
+		return EXIT;
+	}
+
+	free(db->session);
+
+	DebugSession *dbs = new_debug_session(prog, pid);
+	db->session = dbs;
+	// we are the parent process so begin debugging
+	logger(INFO, "Debug session started for executable %s. Session PID: %d.", prog, pid);
+
+	// wait until child process is executing
+	int pid_result = waitpid(pid, &db->session->wait_status, WAIT_OPTIONS);
+	if (pid_result < 0)
+	{
+		logger(ERROR, "failed to wait for process %d. %s", db->session->pid, strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+int run(Debugger *db, char *prog)
+{
+	char *prog_to_run = NULL;
+
+	if (db->session == NULL)
+	{
+		prog_to_run = prog;
+	}
+	else if (db->session->prog != NULL && strcmp(prog, db->session->prog) == 0)
+	{
+		prog_to_run = db->session->prog;
+	}
+	else
+	{
+		prog_to_run = prog;
+	}
+
+	return start_debug_session(db, prog_to_run);
+}
+
 // Parses and runs the given command. Returns 1 if the command was not recognised
 // and -1 for errors.
-int run_command(Debugger *debug, char *input)
+int parse_cmd(Debugger *db, char *input)
 {
+	logger(DEBUG, "Parsing command: %s", input);
+
 	char command_parts[MAX_COMMAND_PARTS][MAX_PART_SIZE];
 
 	// zero the allocated memory
@@ -226,33 +349,52 @@ int run_command(Debugger *debug, char *input)
 		}
 	}
 	char *base_command = command_parts[0];
+	if (strcmp(base_command, "") == 0)
+	{
+		return 0;
+	}
+
 	char *first_arg = command_parts[1];
 
 	if (has_prefix(base_command, "c"))
 	{
-		return continue_execution(debug);
+		return continue_execution(db);
 	}
 
 	if (has_prefix(base_command, "b"))
 	{
-		return add_break_point(debug, first_arg);
+		return add_break_point(db, first_arg);
 	}
 
 	if (has_prefix(base_command, "del"))
 	{
-		return remove_break_point(debug, first_arg);
+		return remove_break_point(db, first_arg);
+	}
+
+	if (has_prefix(base_command, "run") && strcmp(first_arg, "") != 0)
+	{
+		return run(db, first_arg);
+	}
+
+	if (has_prefix(base_command, "q"))
+	{
+		logger(INFO, "Exiting.");
+		return EXIT;
 	}
 	return 1;
 }
 
 // starts the main debugging loop.
-int run_debugger(Debugger *debug)
+int run_cmd_loop(Debugger *db, const char *prog)
 {
-	// wait until child process is executing
-	int pid_result = waitpid(debug->pid, &debug->wait_status, WAIT_OPTIONS);
-	if (pid_result < 0)
+	// intially try to debug the given program
+	int dbs_res = start_debug_session(db, (char *)prog);
+	switch (dbs_res)
 	{
-		logger(ERROR, "failed to wait for process %d. %s", debug->pid, strerror(errno));
+	case -1:
+		logger(ERROR, "Failed to start debug session for executable %s.", prog);
+		break;
+	case EXIT:
 		return 0;
 	}
 
@@ -261,10 +403,9 @@ int run_debugger(Debugger *debug)
 	do
 	{
 		// exit if the child process terminates
-		if (debug->wait_status == 0)
+		if (db->session != NULL && db->session->wait_status == 0)
 		{
-			logger(INFO, "Debugged process %d has terminated", debug->pid);
-			return 0;
+			logger(INFO, "Debug session for executable %s has terminated. Session PID: %d.", db->session->prog, db->session->pid);
 		}
 
 		fputs("edb> ", stdout);
@@ -272,15 +413,17 @@ int run_debugger(Debugger *debug)
 		current_line = fgets(line_buf, MAX_LINE_SIZE, stdin);
 
 		// Run the command but dont exit on failure
-		int cmd_result = run_command(debug, current_line);
+		int cmd_result = parse_cmd(db, current_line);
 		switch (cmd_result)
 		{
 		case 1:
 			logger(WARN, "Command not recognised: %s", current_line);
 			break;
 		case -1:
-			logger(ERROR, "failed to run command: %s", current_line);
+			logger(ERROR, "Failed to run command: %s", current_line);
 			break;
+		case EXIT:
+			return 0;
 		default:
 			break;
 		}
