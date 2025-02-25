@@ -15,6 +15,7 @@
 #include "reg.h"
 
 #define MAX_LINE_SIZE 64
+#define MAX_PROG_NAME_SIZE 32
 #define MAX_COMMAND_PARTS 5
 #define MAX_PART_SIZE 32
 #define WAIT_OPTIONS 0
@@ -30,10 +31,26 @@ DebugSession *new_debug_session(char *prog, int pid)
 		logger(ERROR, "Failed to allocate heap memory for debug session. %s", strerror(errno));
 		return NULL;
 	}
-	dbs->prog = prog;
+
+	char *prog_name_buf = (char *)malloc(MAX_PROG_NAME_SIZE);
+	if (prog_name_buf == NULL)
+	{
+		logger(ERROR, "Failed to allocate heap memory for program name. %s", strerror(errno));
+		return NULL;
+	}
+
+	memcpy(prog_name_buf, prog, MAX_PROG_NAME_SIZE - 1);
+	dbs->prog = prog_name_buf;
+
 	dbs->pid = pid;
 	dbs->wait_status = 0;
 	return dbs;
+}
+
+void remove_debug_session(DebugSession *session)
+{
+	free(session->prog);
+	free(session);
 }
 
 Debugger *new_debugger()
@@ -281,12 +298,14 @@ int start_debug_session(Debugger *db, char *prog)
 		return EXIT;
 	}
 
-	free(db->session);
+	if (db->session != NULL) {
+		remove_debug_session(db->session);
+	}
 
 	DebugSession *dbs = new_debug_session(prog, pid);
 	db->session = dbs;
 	// we are the parent process so begin debugging
-	logger(INFO, "Debug session started for executable %s. Session PID: %d.", prog, pid);
+	logger(INFO, "Debug session started for executable %s. Session PID: %d.", db->session->prog, pid);
 
 	// wait until child process is executing
 	int pid_result = waitpid(pid, &db->session->wait_status, WAIT_OPTIONS);
@@ -302,11 +321,12 @@ int run(Debugger *db, char *prog)
 {
 	char *prog_to_run = NULL;
 
-	if (db->session == NULL)
+	if (strcmp(prog, "") == 0 && db->session == NULL)
 	{
-		prog_to_run = prog;
+		logger(WARN, "No executable provided.");
+		return 0;
 	}
-	else if (db->session->prog != NULL && strcmp(prog, db->session->prog) == 0)
+	else if (strcmp(prog, "") == 0)
 	{
 		prog_to_run = db->session->prog;
 	}
@@ -371,7 +391,7 @@ int parse_cmd(Debugger *db, char *input)
 		return remove_break_point(db, first_arg);
 	}
 
-	if (has_prefix(base_command, "run") && strcmp(first_arg, "") != 0)
+	if (has_prefix(base_command, "run"))
 	{
 		return run(db, first_arg);
 	}
@@ -398,8 +418,8 @@ int run_cmd_loop(Debugger *db, const char *prog)
 		return 0;
 	}
 
-	char line_buf[MAX_LINE_SIZE];
-	char *current_line = NULL;
+	char current_line[MAX_LINE_SIZE];
+
 	do
 	{
 		// exit if the child process terminates
@@ -410,7 +430,7 @@ int run_cmd_loop(Debugger *db, const char *prog)
 
 		fputs("edb> ", stdout);
 		// fgets will stop hanging when either a \n or a EOF is found
-		current_line = fgets(line_buf, MAX_LINE_SIZE, stdin);
+		fgets(current_line, MAX_LINE_SIZE, stdin);
 
 		// Run the command but dont exit on failure
 		int cmd_result = parse_cmd(db, current_line);

@@ -11,7 +11,7 @@
 
 int main(int argc, char *argv[])
 {
-    set_log_level(DEBUG);
+    set_log_level(INFO);
 
     char *prog = NULL;
 
