@@ -39,7 +39,7 @@ DebugSession *new_debug_session(char *prog, int pid)
 		return NULL;
 	}
 
-	memcpy(prog_name_buf, prog, MAX_PROG_NAME_SIZE - 1);
+	memcpy(prog_name_buf, prog, MAX_PROG_NAME_SIZE);
 	dbs->prog = prog_name_buf;
 
 	dbs->pid = pid;
@@ -298,11 +298,16 @@ int start_debug_session(Debugger *db, char *prog)
 		return EXIT;
 	}
 
+	// Since prog still potentially points to the old session at this point need 
+	// to create the new session before freeing the old
+	// one so we dont accidently store garbage
+	DebugSession *dbs = new_debug_session(prog, pid);
+
 	if (db->session != NULL) {
+		logger(DEBUG, "Clearing debug session for program %s. PID: %d", db->session->prog, db->session->pid);
 		remove_debug_session(db->session);
 	}
 
-	DebugSession *dbs = new_debug_session(prog, pid);
 	db->session = dbs;
 	// we are the parent process so begin debugging
 	logger(INFO, "Debug session started for executable %s. Session PID: %d.", db->session->prog, pid);
