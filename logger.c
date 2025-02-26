@@ -75,17 +75,6 @@ void logger(LogLevel level, const char *message, ...)
 
     va_end(args);
 
-    time_t now;
-    time(&now);
-    char * human_time = ctime(&now);
-
-    // remove the trailing newline
-    for (int i = 0; i < strlen(human_time); i++) {
-        if (human_time[i] == '\n') {
-            human_time[i] = '\0';
-        }
-    }
-
     char * level_str;
     switch (level) {
         case DEBUG:
@@ -101,5 +90,5 @@ void logger(LogLevel level, const char *message, ...)
             level_str = "ERROR";
             break;
     }
-    printf("%s [%s]: %s\n", human_time, level_str, formatted_msg);
+    printf("[%s]: %s\n", level_str, formatted_msg);
 }
