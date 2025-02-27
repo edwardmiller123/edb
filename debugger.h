@@ -1,9 +1,12 @@
+#include <stdbool.h>
+
 #include "map.h"
 
 typedef struct DebugSession {
 	char * prog;
 	int pid;
 	int wait_status;
+	bool active;
 } DebugSession;
 
 typedef struct Debugger {

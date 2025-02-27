@@ -223,7 +223,7 @@ int step_over_breakpoint(Debugger *db)
 // Restarts a paused process
 int continue_execution(Debugger *db)
 {
-	if (db->session == NULL)
+	if (db->session == NULL || (db->session != NULL && !db->session->active))
 	{
 		logger(WARN, "No active debugging session.");
 		return 0;
@@ -309,6 +309,8 @@ int start_debug_session(Debugger *db, char *prog)
 	}
 
 	db->session = dbs;
+	db->session->active = true;
+
 	// we are the parent process so begin debugging
 	logger(INFO, "Debug session started for executable %s. Session PID: %d.", db->session->prog, pid);
 
@@ -428,9 +430,10 @@ int run_cmd_loop(Debugger *db, const char *prog)
 	do
 	{
 		// exit if the child process terminates
-		if (db->session != NULL && db->session->wait_status == 0)
+		if (db->session != NULL && db->session->wait_status == 0 && db->session->active)
 		{
 			logger(INFO, "Debug session for executable %s has terminated. Session PID: %d.", db->session->prog, db->session->pid);
+			db->session->active = false;
 		}
 
 		fputs("edb> ", stdout);
