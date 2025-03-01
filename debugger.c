@@ -1,4 +1,3 @@
-#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -6,6 +5,7 @@
 #include <sys/wait.h>
 #include <sys/ptrace.h>
 #include <sys/personality.h>
+#include <unistd.h>
 
 #include "logger.h"
 #include "breakpoint.h"
@@ -19,39 +19,6 @@
 #define MAX_COMMAND_PARTS 5
 #define MAX_PART_SIZE 32
 #define WAIT_OPTIONS 0
-
-// The magic number to exit the program
-#define EXIT -73
-
-DebugSession *new_debug_session(char *prog, int pid)
-{
-	DebugSession *dbs = (DebugSession *)malloc(sizeof(DebugSession));
-	if (dbs == NULL)
-	{
-		logger(ERROR, "Failed to allocate heap memory for debug session. %s", strerror(errno));
-		return NULL;
-	}
-
-	char *prog_name_buf = (char *)malloc(MAX_PROG_NAME_SIZE);
-	if (prog_name_buf == NULL)
-	{
-		logger(ERROR, "Failed to allocate heap memory for program name. %s", strerror(errno));
-		return NULL;
-	}
-
-	memcpy(prog_name_buf, prog, MAX_PROG_NAME_SIZE);
-	dbs->prog = prog_name_buf;
-
-	dbs->pid = pid;
-	dbs->wait_status = 0;
-	return dbs;
-}
-
-void remove_debug_session(DebugSession *session)
-{
-	free(session->prog);
-	free(session);
-}
 
 Debugger *new_debugger()
 {
@@ -269,33 +236,7 @@ int start_debug_session(Debugger *db, char *prog)
 
 	if (pid == 0)
 	{
-		// we are the child process we should allow the parent to trace us
-		// and start executing the program we wish to debug.
-
-		// We return the EXIT code on any errors so that the child process terminates and
-		// isnt left hanging around.
-
-		int last_persona = personality(ADDR_NO_RANDOMIZE);
-		if (last_persona < 0)
-		{
-			logger(ERROR, "Failed to set child personaility. ERRNO: %d\n", errno);
-			return EXIT;
-		}
-
-		ErrResult trace_res = ptrace_with_error(PTRACE_TRACEME, 0, NULL, NULL);
-		if (!trace_res.success)
-		{
-			logger(ERROR, "Failed to start tracing child.");
-			return EXIT;
-		}
-
-		int exec_err = execl(prog, prog, NULL);
-		if (exec_err < 0)
-		{
-			logger(ERROR, "Failed to execute %s. %s\n", prog, strerror(errno));
-			return EXIT;
-		}
-		return EXIT;
+		return start_tracing(prog);
 	}
 
 	// Since prog still potentially points to the old session at this point need 
