@@ -6,6 +6,7 @@
 #include <sys/ptrace.h>
 #include <sys/personality.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "logger.h"
 #include "breakpoint.h"
@@ -239,18 +240,26 @@ int start_debug_session(Debugger *db, char *prog)
 		return start_tracing(prog);
 	}
 
-	// Since prog still potentially points to the old session at this point need 
+	// Since prog still potentially points to the old session at this point need
 	// to create the new session before freeing the old
 	// one so we dont accidently store garbage
 	DebugSession *dbs = new_debug_session(prog, pid);
 
-	if (db->session != NULL) {
+	if (db->session != NULL)
+	{
 		logger(DEBUG, "Clearing debug session for program %s. PID: %d", db->session->prog, db->session->pid);
 		remove_debug_session(db->session);
 	}
 
 	db->session = dbs;
 	db->session->active = true;
+
+	int dwarf_res = parse_dwarf_info(db->session);
+	if (dwarf_res == -1)
+	{
+		logger(ERROR, "Failed to parse DWARF info");
+		return -1;
+	}
 
 	// we are the parent process so begin debugging
 	logger(INFO, "Debug session started for executable %s. Session PID: %d.", db->session->prog, pid);
@@ -284,6 +293,20 @@ int run(Debugger *db, char *prog)
 	}
 
 	return start_debug_session(db, prog_to_run);
+}
+
+int quit(Debugger *db)
+{
+	logger(INFO, "Exiting.");
+	if (db->session != NULL && db->session->active)
+	{
+		int res = kill(db->session->pid, SIGKILL);
+		if (res == -1)
+		{
+			logger(ERROR, "Failed to terminate on going debug session with pid %d. %s", db->session->pid, strerror(errno));
+		}
+	}
+	return EXIT;
 }
 
 // Parses and runs the given command. Returns 1 if the command was not recognised
@@ -346,8 +369,7 @@ int parse_cmd(Debugger *db, char *input)
 
 	if (has_prefix(base_command, "q"))
 	{
-		logger(INFO, "Exiting.");
-		return EXIT;
+		return quit(db);
 	}
 	return 1;
 }

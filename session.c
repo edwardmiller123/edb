@@ -67,7 +67,7 @@ int start_tracing(char *prog)
 	int exec_err = execl(prog, prog, NULL);
 	if (exec_err < 0)
 	{
-		logger(ERROR, "Failed to execute %s. %s\n", prog, strerror(errno));
+		logger(ERROR, "Failed to execute %s. %s", prog, strerror(errno));
 		return EXIT;
 	}
 	return EXIT;
@@ -79,6 +79,30 @@ int start_tracing(char *prog)
 // 	- find .debug_line section by cross referencing with header name string table
 // 	- load .debug_line section into memory and parse to create map of line numbers to memory addresses
 
+// Parses the dwarf info from the program path in the given session
 int parse_dwarf_info(DebugSession * session)
 {
+	FILE * elf = fopen(session->prog, "rb");
+	if (elf == NULL) {
+		logger(ERROR, "Failed to open file. %s", strerror(errno));
+		return -1;
+	}
+
+	char elf_identifier[] = {0x7f, 'E', 'L', 'F'};
+	// check the elf identifier header
+	char ident_buf[16];
+	fread(ident_buf, 1, 16, elf);
+	for (int i = 0; i < 4; i++) {
+		if (ident_buf[i] != elf_identifier[i]) {
+			logger(ERROR, "Program is not ELF format.");
+			return -1;
+		}
+	}
+
+	int close_res = fclose(elf);
+	if (close_res != 0) {
+		logger(ERROR, "Failed to close file. %s", strerror(errno));
+		return -1;
+	}
+	return 0;
 }

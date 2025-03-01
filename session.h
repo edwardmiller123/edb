@@ -71,4 +71,6 @@ void remove_debug_session(DebugSession *session);
 
 int start_tracing(char *prog);
 
+int parse_dwarf_info(DebugSession * session);
+
 #endif
