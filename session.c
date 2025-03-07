@@ -11,6 +11,8 @@
 #include "utils.h"
 
 #define MAX_PROG_NAME_SIZE 32
+#define MAX_HEADER_NAME_SIZE 32
+#define DEBUG_LINE_HEADER ".debug_line"
 
 DebugSession *new_debug_session(char *prog, int pid)
 {
@@ -64,8 +66,7 @@ int start_tracing(char *prog)
 		return EXIT;
 	}
 
-	int exec_err = execl(prog, prog, NULL);
-	if (exec_err < 0)
+	if (execl(prog, prog, NULL) < 0)
 	{
 		logger(ERROR, "Failed to execute %s. %s", prog, strerror(errno));
 		return EXIT;
@@ -79,28 +80,119 @@ int start_tracing(char *prog)
 // 	- find .debug_line section by cross referencing with header name string table
 // 	- load .debug_line section into memory and parse to create map of line numbers to memory addresses
 
-// Parses the dwarf info from the program path in the given session
-int parse_dwarf_info(DebugSession * session)
+int validate_elf(FILE *elf_file)
 {
-	FILE * elf = fopen(session->prog, "rb");
-	if (elf == NULL) {
-		logger(ERROR, "Failed to open file. %s", strerror(errno));
-		return -1;
-	}
-
 	char elf_identifier[] = {0x7f, 'E', 'L', 'F'};
 	// check the elf identifier header
 	char ident_buf[16];
-	fread(ident_buf, 1, 16, elf);
-	for (int i = 0; i < 4; i++) {
-		if (ident_buf[i] != elf_identifier[i]) {
+	size_t ident_bytes_read = fread(ident_buf, 1, 16, elf_file);
+	if (ident_bytes_read == 0)
+	{
+		logger(ERROR, "Failed to read elf itentifier. %s", strerror(errno));
+		return -1;
+	}
+
+	for (int i = 0; i < 4; i++)
+	{
+		if (ident_buf[i] != elf_identifier[i])
+		{
 			logger(ERROR, "Program is not ELF format.");
 			return -1;
 		}
 	}
+	return 0;
+}
 
-	int close_res = fclose(elf);
-	if (close_res != 0) {
+uint64_t locate_elf_section(char *section_name, char *name_table, uint32_t name_table_size, elf_section_header header_table[], uint16_t header_count)
+{
+	uint64_t header_pos = 0;
+	char *current_header_name = NULL;
+	for (int i = 0; i <= header_count; i++)
+	{
+		current_header_name = (char *)(name_table + header_table[i].sh_name);
+		if (strcmp(section_name, current_header_name) == 0)
+		{
+			header_pos = header_table[i].sh_offset;
+			logger(DEBUG, "%s section found at offset %p.", section_name, (void *)header_pos);
+			break;
+		}
+	}
+
+	return header_pos;
+}
+
+// Parses the dwarf info from the program path in the given session
+int parse_dwarf_info(DebugSession *session)
+{
+	FILE *elf_file = fopen(session->prog, "rb");
+	if (elf_file == NULL)
+	{
+		logger(ERROR, "Failed to open file. %s", strerror(errno));
+		return -1;
+	}
+
+	if (validate_elf(elf_file) == -1)
+	{
+		logger(ERROR, "Failed to validate elf file. %s", strerror(errno));
+		return -1;
+	}
+
+	logger(DEBUG, "Parsing DWARF info from %s.", session->prog);
+
+	// read the general file info
+	elf_info info;
+	if (fread(&info, 1, sizeof(elf_info), elf_file) == 0)
+	{
+		logger(ERROR, "Failed to read elf file info. %s", strerror(errno));
+		return -1;
+	}
+
+	uint16_t header_count = info.e_shnum;
+	logger(DEBUG, "Section header table found at offset %p with %d entries.", (void *)info.e_shoff, header_count);
+
+	// get the section header table
+	elf_section_header header_table[header_count];
+	if (fseek(elf_file, info.e_shoff, SEEK_SET) < 0)
+	{
+		logger(ERROR, "Failed to look ahead for header table. %s", strerror(errno));
+		return -1;
+	}
+
+	if (fread(header_table, sizeof(char), header_count * sizeof(elf_section_header), elf_file) == 0)
+	{
+		logger(ERROR, "Failed to read header table. %s", strerror(errno));
+		return -1;
+	}
+
+	elf_section_header names_header = header_table[info.e_shstrndx];
+	uint64_t names_table_pos = names_header.sh_offset;
+	uint64_t name_table_size = names_header.sh_size;
+	logger(DEBUG, "Header names found at offset %p.", (void *)names_table_pos);
+
+	if (fseek(elf_file, names_table_pos, SEEK_SET) < 0)
+	{
+		logger(ERROR, "Failed to look ahead for section name table. %s", strerror(errno));
+		return -1;
+	}
+
+	// get header name table
+	char name_table[name_table_size];
+	if (fread(name_table, sizeof(char), name_table_size, elf_file) != name_table_size)
+	{
+		logger(ERROR, "Failed to read name table. %s", strerror(errno));
+		return -1;
+	}
+
+	// find .debug_line section
+	uint64_t debug_line_header_pos = locate_elf_section(DEBUG_LINE_HEADER, name_table, name_table_size, header_table, header_count);
+	if (debug_line_header_pos == 0)
+	{
+		logger(ERROR, "Failed to locate %s section.", DEBUG_LINE_HEADER);
+		return -1;
+	}
+
+	if (fclose(elf_file) != 0)
+	{
 		logger(ERROR, "Failed to close file. %s", strerror(errno));
 		return -1;
 	}

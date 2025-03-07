@@ -2,6 +2,7 @@
 #define SESSION_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "map.h"
 
@@ -16,19 +17,20 @@ typedef struct DebugSession {
 	Map * line_numbers;
 } DebugSession;
 
-#include <stdint.h>
-
 // General info about the ELF file
 typedef struct elf_info {
 	uint16_t e_type;
 	uint16_t e_machine;
 	uint32_t e_version;
-	void * e_entry;
+
+	// location of the binary in memory
+	uint64_t e_entry;
 
 	// program header table offset
-	void * e_phoff;
+	uint64_t e_phoff;
 
-	void * e_shoff;
+	// section header table offset
+	uint64_t e_shoff;
 	uint32_t e_flags;
 	uint16_t e_ehsize;
 	uint16_t e_phentsize;
@@ -40,7 +42,7 @@ typedef struct elf_info {
 	// number of section header table entries
 	uint16_t e_shnum;
 
-	// index of the section name string table in the section table
+	// index of the section name string table in the header table
 	uint16_t e_shstrndx;
 } elf_info;
 
@@ -50,19 +52,19 @@ typedef struct elf_section_header {
     uint32_t sh_name;
 
     uint32_t sh_type;
-    void * sh_flags;
-    void * sh_addr;
+    uint64_t sh_flags;
+    uint64_t sh_addr;
 
 	// the sections offset in memory from the beggining of the elf
-    void * sh_offset;
+    uint64_t sh_offset;
 
 	// size of the section
     uint64_t sh_size;
 
     uint32_t sh_link;
     uint32_t sh_info;
-    void * sh_addralign;
-    void * sh_entsize;
+    uint64_t sh_addralign;
+    uint64_t sh_entsize;
 } elf_section_header;
 
 DebugSession *new_debug_session(char *prog, int pid);

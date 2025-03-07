@@ -11,7 +11,7 @@
 
 int main(int argc, char *argv[])
 {
-    set_log_level(INFO);
+    set_log_level(DEBUG);
 
     char *prog = NULL;
 
@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
 
     int res = run_cmd_loop(db, prog);
     if (res == -1) {
-        logger(ERROR, "Failed to rum command loop");
+        logger(ERROR, "Failed to run command loop");
     }
 
     free(db);

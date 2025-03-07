@@ -265,8 +265,7 @@ int start_debug_session(Debugger *db, char *prog)
 	logger(INFO, "Debug session started for executable %s. Session PID: %d.", db->session->prog, pid);
 
 	// wait until child process is executing
-	int pid_result = waitpid(pid, &db->session->wait_status, WAIT_OPTIONS);
-	if (pid_result < 0)
+	if (waitpid(pid, &db->session->wait_status, WAIT_OPTIONS) < 0)
 	{
 		logger(ERROR, "failed to wait for process %d. %s", db->session->pid, strerror(errno));
 		return -1;
@@ -378,8 +377,7 @@ int parse_cmd(Debugger *db, char *input)
 int run_cmd_loop(Debugger *db, const char *prog)
 {
 	// intially try to debug the given program
-	int dbs_res = start_debug_session(db, (char *)prog);
-	switch (dbs_res)
+	switch (start_debug_session(db, (char *)prog))
 	{
 	case -1:
 		logger(ERROR, "Failed to start debug session for executable %s.", prog);
