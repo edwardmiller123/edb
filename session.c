@@ -103,22 +103,22 @@ int validate_elf(FILE *elf_file)
 	return 0;
 }
 
-uint64_t locate_elf_section(char *section_name, char *name_table, uint32_t name_table_size, elf_section_header header_table[], uint16_t header_count)
+// Finds the the elf section header matching the given input string
+int locate_elf_section(char *section_name, char *name_table, uint32_t name_table_size, elf_section_header header_table[], uint16_t header_count, elf_section_header * header)
 {
-	uint64_t header_pos = 0;
 	char *current_header_name = NULL;
 	for (int i = 0; i <= header_count; i++)
 	{
 		current_header_name = (char *)(name_table + header_table[i].sh_name);
 		if (strcmp(section_name, current_header_name) == 0)
 		{
-			header_pos = header_table[i].sh_offset;
-			logger(DEBUG, "%s section found at offset %p.", section_name, (void *)header_pos);
-			break;
+			*header = header_table[i];
+			logger(DEBUG, "%s section found at offset %p.", section_name, (void *)header_table[i].sh_offset);
+			return 0;
 		}
 	}
 
-	return header_pos;
+	return -1;
 }
 
 // Parses the dwarf info from the program path in the given session
@@ -184,10 +184,23 @@ int parse_dwarf_info(DebugSession *session)
 	}
 
 	// find .debug_line section
-	uint64_t debug_line_header_pos = locate_elf_section(DEBUG_LINE_HEADER, name_table, name_table_size, header_table, header_count);
-	if (debug_line_header_pos == 0)
+	elf_section_header debug_line_header;
+	if (locate_elf_section(DEBUG_LINE_HEADER, name_table, name_table_size, header_table, header_count, &debug_line_header) == -1)
 	{
 		logger(ERROR, "Failed to locate %s section.", DEBUG_LINE_HEADER);
+		return -1;
+	}
+
+	if (fseek(elf_file, debug_line_header.sh_offset, SEEK_SET) == -1)
+	{
+		logger(ERROR, "Failed to look ahead for .debug_line section. %s", strerror(errno));
+		return -1;
+	}
+
+	char debug_line_section[debug_line_header.sh_size];
+	if (fread(debug_line_section, sizeof(char), debug_line_header.sh_size, elf_file) != debug_line_header.sh_size)
+	{
+		logger(ERROR, "Failed to read .debug_line section. %s", strerror(errno));
 		return -1;
 	}
 

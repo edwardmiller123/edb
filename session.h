@@ -48,14 +48,14 @@ typedef struct elf_info {
 
 // Info about a specific elf section
 typedef struct elf_section_header {
-	// name of the section as an index into the section name string table
+	// name of the section as an offset into the section name string table
     uint32_t sh_name;
 
     uint32_t sh_type;
     uint64_t sh_flags;
     uint64_t sh_addr;
 
-	// the sections offset in memory from the beggining of the elf
+	// the sections offset in memory from the begining of the elf
     uint64_t sh_offset;
 
 	// size of the section
