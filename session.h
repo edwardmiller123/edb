@@ -18,7 +18,7 @@ typedef struct DebugSession {
 } DebugSession;
 
 // General info about the ELF file
-typedef struct elf_info {
+typedef struct ElfInfo {
 	uint16_t e_type;
 	uint16_t e_machine;
 	uint32_t e_version;
@@ -44,10 +44,10 @@ typedef struct elf_info {
 
 	// index of the section name string table in the header table
 	uint16_t e_shstrndx;
-} elf_info;
+} ElfInfo;
 
 // Info about a specific elf section
-typedef struct elf_section_header {
+typedef struct ElfSectionHeader {
 	// name of the section as an offset into the section name string table
     uint32_t sh_name;
 
@@ -65,7 +65,19 @@ typedef struct elf_section_header {
     uint32_t sh_info;
     uint64_t sh_addralign;
     uint64_t sh_entsize;
-} elf_section_header;
+} ElfSectionHeader;
+
+typedef struct __attribute__((packed)) {
+    uint32_t length;
+    uint16_t version;
+    uint32_t header_length;
+    uint8_t min_instruction_length;
+    uint8_t default_is_stmt;
+    int8_t line_base;
+    uint8_t line_range;
+    uint8_t opcode_base;
+    uint8_t std_opcode_lengths[12];
+} DwarfDebugLineHeader;
 
 DebugSession *new_debug_session(char *prog, int pid);
 

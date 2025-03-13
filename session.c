@@ -104,7 +104,7 @@ int validate_elf(FILE *elf_file)
 }
 
 // Finds the the elf section header matching the given input string
-int locate_elf_section(char *section_name, char *name_table, uint32_t name_table_size, elf_section_header header_table[], uint16_t header_count, elf_section_header * header)
+int locate_elf_section(char *section_name, char *name_table, uint32_t name_table_size, ElfSectionHeader header_table[], uint16_t header_count, ElfSectionHeader * header)
 {
 	char *current_header_name = NULL;
 	for (int i = 0; i <= header_count; i++)
@@ -140,8 +140,8 @@ int parse_dwarf_info(DebugSession *session)
 	logger(DEBUG, "Parsing DWARF info from %s.", session->prog);
 
 	// read the general file info
-	elf_info info;
-	if (fread(&info, 1, sizeof(elf_info), elf_file) == 0)
+	ElfInfo info;
+	if (fread(&info, 1, sizeof(ElfInfo), elf_file) == 0)
 	{
 		logger(ERROR, "Failed to read elf file info. %s", strerror(errno));
 		return -1;
@@ -151,20 +151,20 @@ int parse_dwarf_info(DebugSession *session)
 	logger(DEBUG, "Section header table found at offset %p with %d entries.", (void *)info.e_shoff, header_count);
 
 	// get the section header table
-	elf_section_header header_table[header_count];
+	ElfSectionHeader header_table[header_count];
 	if (fseek(elf_file, info.e_shoff, SEEK_SET) < 0)
 	{
 		logger(ERROR, "Failed to look ahead for header table. %s", strerror(errno));
 		return -1;
 	}
 
-	if (fread(header_table, sizeof(char), header_count * sizeof(elf_section_header), elf_file) == 0)
+	if (fread(header_table, sizeof(char), header_count * sizeof(ElfSectionHeader), elf_file) == 0)
 	{
 		logger(ERROR, "Failed to read header table. %s", strerror(errno));
 		return -1;
 	}
 
-	elf_section_header names_header = header_table[info.e_shstrndx];
+	ElfSectionHeader names_header = header_table[info.e_shstrndx];
 	uint64_t names_table_pos = names_header.sh_offset;
 	uint64_t name_table_size = names_header.sh_size;
 	logger(DEBUG, "Header names found at offset %p.", (void *)names_table_pos);
@@ -184,7 +184,7 @@ int parse_dwarf_info(DebugSession *session)
 	}
 
 	// find .debug_line section
-	elf_section_header debug_line_header;
+	ElfSectionHeader debug_line_header;
 	if (locate_elf_section(DEBUG_LINE_HEADER, name_table, name_table_size, header_table, header_count, &debug_line_header) == -1)
 	{
 		logger(ERROR, "Failed to locate %s section.", DEBUG_LINE_HEADER);
