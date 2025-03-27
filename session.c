@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #include "session.h"
 #include "logger.h"
@@ -12,6 +13,7 @@
 
 #define MAX_PROG_NAME_SIZE 32
 #define MAX_HEADER_NAME_SIZE 32
+#define FILE_TABLE_SIZE 128
 #define DEBUG_LINE_HEADER ".debug_line"
 
 DebugSession *new_debug_session(char *prog, int pid)
@@ -104,7 +106,7 @@ int validate_elf(FILE *elf_file)
 }
 
 // Finds the the elf section header matching the given input string
-int locate_elf_section(char *section_name, char *name_table, uint32_t name_table_size, ElfSectionHeader header_table[], uint16_t header_count, ElfSectionHeader * header)
+int locate_elf_section(char *section_name, char *name_table, uint32_t name_table_size, ElfSectionHeader header_table[], uint16_t header_count, ElfSectionHeader *header)
 {
 	char *current_header_name = NULL;
 	for (int i = 0; i <= header_count; i++)
@@ -119,6 +121,71 @@ int locate_elf_section(char *section_name, char *name_table, uint32_t name_table
 	}
 
 	return -1;
+}
+
+// Extracts a map of memory addresses to line numbers from the given buffer containing a .debug_section
+Map *get_line_numbers(uint8_t *debug_line_section, uint64_t section_size)
+{
+	Map *line_numbers = new_map();
+	if (line_numbers == NULL)
+	{
+		logger(ERROR, "Failed to initialise map");
+		return NULL;
+	}
+	// TODO: parse dwarf using statemachine
+
+	DwarfParserStateMachine state_machine = {
+		.addr = 0,
+		.line_number = 0,
+		.src_file = NULL,
+	};
+
+	DwarfDebugLineHeader current_cu_header;
+	int file_table_buf_idx = 0;
+	// buffer containing both the directory and file tables
+	uint8_t file_table_buffer[FILE_TABLE_SIZE];
+	int compilation_unit = 0;
+	bool parsing_file_table = false;
+	uint64_t section_current_byte = 0;
+
+	// keeps track of the current byte we are on in the CU
+	uint64_t cu_current_byte = 0;
+	while(section_current_byte < section_size)
+	{
+
+		if (cu_current_byte < sizeof(DwarfDebugLineHeader))
+		{
+			// read the header for the current CU
+			logger(DEBUG, "Reading header of CU %d.", compilation_unit);
+			memcpy(&current_cu_header, debug_line_section, sizeof(DwarfDebugLineHeader));
+
+			cu_current_byte += sizeof(DwarfDebugLineHeader);
+			section_current_byte += sizeof(DwarfDebugLineHeader);
+
+			logger(DEBUG, "Found %d lines in CU %d.", current_cu_header.line_range, compilation_unit);
+			parsing_file_table = true;
+		}
+
+		if (parsing_file_table)
+		{
+			// the opcodes offset from the beginning of the CU. Plus 18 as the header length field doesnt
+			// include the field itself or the previous two fields
+			uint64_t opcodes_offset = current_cu_header.header_length + 18;
+			logger(DEBUG, "Opcodes for CU %d found at offset %d.", compilation_unit, opcodes_offset);
+			// read the file and directory table
+			while(cu_current_byte < opcodes_offset && section_current_byte < section_size) {
+				file_table_buffer[file_table_buf_idx] = debug_line_section[section_current_byte];
+				
+				file_table_buf_idx++;
+				section_current_byte++;
+				cu_current_byte++;
+				printf("%c\n", file_table_buffer[file_table_buf_idx]);
+			}
+			parsing_file_table = true;
+		}
+	}
+	printf("%s\n", file_table_buffer);
+	return line_numbers;
 }
 
 // Parses the dwarf info from the program path in the given session
@@ -184,23 +251,35 @@ int parse_dwarf_info(DebugSession *session)
 	}
 
 	// find .debug_line section
-	ElfSectionHeader debug_line_header;
-	if (locate_elf_section(DEBUG_LINE_HEADER, name_table, name_table_size, header_table, header_count, &debug_line_header) == -1)
+	ElfSectionHeader debug_line_section_table_header;
+	if (locate_elf_section(DEBUG_LINE_HEADER, name_table, name_table_size, header_table, header_count, &debug_line_section_table_header) == -1)
 	{
 		logger(ERROR, "Failed to locate %s section.", DEBUG_LINE_HEADER);
 		return -1;
 	}
 
-	if (fseek(elf_file, debug_line_header.sh_offset, SEEK_SET) == -1)
+	if (fseek(elf_file, debug_line_section_table_header.sh_offset, SEEK_SET) == -1)
 	{
 		logger(ERROR, "Failed to look ahead for .debug_line section. %s", strerror(errno));
 		return -1;
 	}
 
-	char debug_line_section[debug_line_header.sh_size];
-	if (fread(debug_line_section, sizeof(char), debug_line_header.sh_size, elf_file) != debug_line_header.sh_size)
+	// the debug line section is comprised of a CUs each with a header struct,
+	// then a directory table then a file name table and finally a list of opcodes encoding a line number and memory address.
+	// We read the whole section into memory then break it up into the CUs.
+	uint8_t debug_line_section[debug_line_section_table_header.sh_size];
+	if (fread(debug_line_section, sizeof(char), debug_line_section_table_header.sh_size, elf_file) != debug_line_section_table_header.sh_size)
 	{
-		logger(ERROR, "Failed to read .debug_line section. %s", strerror(errno));
+		logger(ERROR, "Failed to read .debug_line section header. %s", strerror(errno));
+		return -1;
+	}
+
+	logger(DEBUG, "Parsing .debug_line section.");
+
+	Map *line_numbers = get_line_numbers(debug_line_section, debug_line_section_table_header.sh_size);
+	if (line_numbers == NULL)
+	{
+		logger(ERROR, "Failed to extract line numbers");
 		return -1;
 	}
 

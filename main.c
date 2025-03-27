@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
 
     if (argc >= 2)
     {
-        prog = argv[1];;
+        prog = argv[1];
     }
 
     Debugger * db = new_debugger();

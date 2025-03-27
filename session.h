@@ -67,17 +67,28 @@ typedef struct ElfSectionHeader {
     uint64_t sh_entsize;
 } ElfSectionHeader;
 
-typedef struct __attribute__((packed)) {
-    uint32_t length;
+typedef struct DwarfDebugLineHeader {
+    uint64_t length;
     uint16_t version;
-    uint32_t header_length;
+    uint64_t header_length;
     uint8_t min_instruction_length;
     uint8_t default_is_stmt;
     int8_t line_base;
     uint8_t line_range;
     uint8_t opcode_base;
     uint8_t std_opcode_lengths[12];
-} DwarfDebugLineHeader;
+} __attribute__((packed)) DwarfDebugLineHeader;
+
+typedef struct {
+	uint64_t addr;
+	char * src_file;
+	uint64_t line_number;
+} DwarfParserStateMachine;
+
+typedef struct {
+	uint32_t line_number;
+	char * file;
+} LineNumberInfo;
 
 DebugSession *new_debug_session(char *prog, int pid);
 
